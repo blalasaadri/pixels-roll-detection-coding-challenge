@@ -452,3 +452,4 @@ $RECYCLE.BIN/
 
 # Manual additions
 README.html
+src/**.csv
