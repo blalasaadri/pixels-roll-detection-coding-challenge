@@ -1,3 +1,4 @@
-pre-commit
+pre-commit==3.3.3
 mypy
 click
+black==23.7.0
