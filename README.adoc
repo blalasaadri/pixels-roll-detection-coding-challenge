@@ -70,7 +70,7 @@ It is provided for reference.
 
 Along with the csv files, I will provide recordings of the die rolls, with the accelerometer readings and annotations visible.
 I found a clever way to generate those without needing to do a ton of editing work.
-This will be useful when you want to cross-reference the csv data with the video of what happened to the die. 
+This will be useful when you want to cross-reference the csv data with the video of what happened to the die.
 
 image::data/_general/video-reference-preview.png[]
 
@@ -123,7 +123,7 @@ State UpdateState(int milliseconds, float x, float y, float z) {
     // Your logic here
 }
 ```
-This method would be called repeatedly from main() with a new line of data read from the csv file. 
+This method would be called repeatedly from main() with a new line of data read from the csv file.
 
 #### Datasets / Output States
 I will be generating a number of datasets throughout the challenge time.
@@ -193,6 +193,14 @@ video::data/dataset_02/Samples2.webm[]
 ## Requirements
 
 This project is written using Python 3.10, though any version of Python 3 should work.
+If that is available, you can install all further requirements by running the following command within the link:src[] directory:
+
+```src
+# If pip is a Python 3 pip:
+pip install -r requirements.txt
+# Otherwise it's probably something like:
+pip3 install -r requirements.txt
+```
 
 ## How to run the code
 
