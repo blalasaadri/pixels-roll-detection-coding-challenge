@@ -30,7 +30,7 @@ def start(infile: str, output: str, backtracking: int, maxage: int):
         "Reading from {} and writing to {}...".format(infile, output), color=True
     )
 
-    determine_state.initialize(max_backtrack=backtracking, max_age_in_millis=maxage)
+    determine_state.initialize(max_backtracking=backtracking, max_age_in_millis=maxage)
 
     with open(infile, newline="", mode="r") as input_file, open(
         output, mode="w"
