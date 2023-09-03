@@ -11,7 +11,7 @@ import determine_state
 @click.option(
     "--output",
     prompt="Output CSV",
-    default="out.csv",
+    default="{}/out.csv".format(os.environ.get("PIXELS_OUTPUT_DIR", "./output")),
     help="The CSV output file to which to write the determined roll states.",
 )
 @click.option(

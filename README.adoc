@@ -213,9 +213,31 @@ python3 src/start.py data/dataset_01/Pixels_simple_rolls_1.csv --output output/o
 Alternatively you can run this in Docker without having to install any Python dependencies:
 [source, sh]
 ----
+# This first line only has to be run once
 docker build . -t pixels-roll-detect
-docker run -v "$PWD/data:/tmp/data" -v "$PWD/output:/tmp/output" pixels-roll-detect /tmp/data/dataset_01/Pixels_simple_rolls_1.csv --output /tmp/output/out.csv
+docker run -it \
+           -v "$PWD/data:/tmp/data" \
+           -v "$PWD/output:/tmp/output" \
+           pixels-roll-detect \
+           /tmp/data/dataset_01/Pixels_simple_rolls_1.csv \
+           --output /tmp/output/out.csv
 ----
+Let's look at that second command in some detail.
+[source, sh]
+----
+docker run -it \ #<1>
+           -v "$PWD/data:/tmp/data" \ #<2>
+           -v "$PWD/output:/tmp/output" \ #<3>
+           pixels-roll-detect \ #<4>
+           /tmp/data/dataset_01/Pixels_simple_rolls_1.csv \ #<5>
+           --output /tmp/output/out.csv #<6>
+----
+<1> This calls Docker and tells it to run a command in _interactive_ mode and with a pseudo-TTY; this basically means that you can give input via command line (relevant if you leave out the output file).
+<2> The path `"$PWD/data:/tmp/data"` means, that the path `data` within the present working directory will be available as the path `/tmp/data` within the Docker container. If you do not want to use the local path `data` but instead a different data directory, you can change that setting. Also, the `$PWD` part is compatible with unixoid systems (e.g. macOS and Linux) and will probably not work on Windows; try using `%cd%` on Windows instead.
+<3> Similar to the prior part, this determines that an output directory will be available under `/tmp/output` within the Docker container and that will map to the local path `output` within the current working directory. And again, on Windows systems you probably want to switch `$PWD` for `%cd%`.
+<4> This is the name of the Docker image built from the link:Dockerfile[] via the command `docker build . -t pixels-roll-detect`. You can change the name of the image in that first command e.g. if it may conflict with other Docker images; in that case you also have to change it here.
+<5> This defines the input file to be used. Since we mapped the directory local `data` to the directory `/tmp/data` within the Dockerfile in the second line of this command, the file `/tmp/data/dataset_01/Pixels_simple_rolls_1.csv` will correspond to the local file `data/dataset_01/Pixels_simple_rolls_1.csv` (which is included in this repository). If you want to use a different input file, this is the place to change that.
+<6> This is the definition of the output file, which you can rename as you choose. It lies in the directory `/tmp/output` within the Docker image, which (according to the third line of this command) maps to the local directory `output` (included in this repository, but empty except for a `.gitignore` file). If you want to rename the output file, this is the place to do so. Also, this command is optional; if not given, you will be prompted for an output file path.
 
 ## How the code works
 
