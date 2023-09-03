@@ -1,10 +1,18 @@
 # Pixels Electronic Dice roll detection coding challenge
 :source-highlighter: highlightjs
+:stem:
 :icons: font
+:sectnums:
 :toclevels: 3
 :toc: auto
 
 This is an entry to the coding challenge for the https://gamewithpixels.com[Pixels Electronic Dice] coding challenge for better roll detection.
+It is written in Python 3 (though by someone with very little experience in Python), the algorithm however does not use anything specific to Python and the dependencies used are only used to make the project easier to run and to avoid coding errors.
+
+Section 1:: This section is meant for understanding the context; if you are familiar with Pixels dice and the coding challenge, you can skip this part.
+Section 2:: This section is a quick explanation on how to install the requirements, if you want to run this project locally with a local installation of Python 3.
+Section 3:: This section gets into how to run this code. It can be run either with a local installation of https://www.python.org/[Python 3] or within a https://www.docker.com/[Docker] container.
+Section 4:: This section explains the actual algorithm used to detect the roll status.
 
 ## What are Pixels Electronic Dice and what is this project?
 
@@ -190,7 +198,7 @@ Here is the second dataset, quite a bit longer than the previous one.
 video::data/dataset_02/Samples2.webm[]
 * link:data/dataset_02/Samples2.csv[Samples2.csv]
 
-## Requirements
+## Installing required libraries with Python
 
 This project is written using Python 3.10, though any version of Python 3 should work.
 If that is available, you can install all further requirements by running the following command within the link:src[] directory:
@@ -204,11 +212,15 @@ pip3 install -r requirements.txt
 
 ## How to run the code
 
+### With Python 3 installed
+
 Assuming you have a Python 3 installation available on your path as `python3`, you can run the following command:
 [source, sh]
 ----
 python3 src/start.py data/dataset_01/Pixels_simple_rolls_1.csv --output output/output.csv
 ----
+
+### Using Docker
 
 Alternatively you can run this in Docker without having to install any Python dependencies:
 [source, sh]
@@ -241,4 +253,58 @@ docker run -it \ #<1>
 
 ## How the code works
 
-TODO
+The actual logic is all contained within the link:src/determine_state.py[] file.
+The individual steps of the logic can be found within the `updateState` method:
+[source, python]
+----
+def updateState(time: int, measurements: tuple[float, float, float]):
+include::src/determine_state.py[tag=updateState-history]
+
+include::src/determine_state.py[tag=updateState-totalAcceleration]
+
+include::src/determine_state.py[tag=updateState-totalGravitySquared]
+----
+Let's get into the individual steps.
+
+### Updating the history
+First of all, we want to limit how many data points we want to be looking at.
+We can only ever look into the past, never the future - so we're looking at the current value and some "historical" data; this is called _backtracking_.
+There is some limit as to how useful that data is going to be though.
+So first of all, we have a maximum number of entries we may look at for any given state determination attempt.
+This value can be changed by setting the `--backtracking` argument in the command line call, the default is 10.
+
+However, even if we only look at a certain number of values, there may still be data in there that is not useful because it is too old.
+That is why we also filter by the maximum age (given in milli seconds) of an entry compared to the latest entry.
+This value can be set via the `--maxage` command line option and is 10000 by default (wich equals 10 seconds).
+[source, python]
+----
+include::src/determine_state.py[tag=updateState-history,indent=0]
+----
+
+### Calculating total acceleration
+Next, we want to filter out cases where the die is obviously not rolling.
+This can be done by calculating the absolute differences between each two consecutive values and finding the maximum of those differences.
+If the maximum difference between any two consecutive values is minimal, the die is very obviously not being rolled.
+[source, python]
+----
+include::src/determine_state.py[tag=updateState-totalAcceleration,indent=0]
+----
+
+### Calculating the accumulated measured gravity
+Step 3 is determining, what the accumulated measured gravity value is.
+In a perfect world with perfect sensors, when the die is just laying flat and not being moved, this would be exactly stem:[1] at all times.
+Since however we do not live in a perfect world and the dies sensors will register small fluctuations (whether or not they are actually there), we have to work with a margin of error here.
+
+Looking at the example data, the accummulated measured gravity (which can be calculated via the formula stem:[sqrt(x^2 + y^2 + z^2)]) hovers around stem:[1.05] when the die is laying flat (and thus the state should be `OnFace`).
+Since calculating a square root is computationally rather complex though, we'll be working with the square of the accumulated measured gravity (stem:[x^2 + y^2 + z^2]) which averages at about stem:[1.107] when the die should be in the `OnFace` state.
+To be sure, we'll be a bit generous here and state that everything that is at least stem:[1.0] and lower than stem:[1.11] should be considered laying down; these values may be modified slightly if required.
+[source, python]
+----
+include::src/determine_state.py[tag=updateState-totalGravitySquared,indent=0]
+----
+[IMPORTANT]
+====
+With these two checks, we catch _almost_ every case where the die is in the `OnFace` state according to the manual tagging.
+
+The remaining cases in the sample data where this is not the case (so cases that were manually tagged as `OnFace` and this algorithm doesn't recognise as such), are all right before data points where the manually tagged state acutally does change (specifically always 1 or two 2 data points before such a case) and thus are probably mislabelings.
+====
