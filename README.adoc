@@ -334,3 +334,17 @@ include::src/determine_state.py[tag=updateState-totalGravitySquaredDiffs,indent=
 ----
 
 This already handles a large percentage of all cases; in the link:data/dataset_02/Sample2.csv[] file (which is the larger of the two provided samples) only 70 of the 1,325 data points cannot be assigned with the prior tests.
+But we can do better than that.
+
+### Absolute differences to the previous result
+
+To determine the states of the remaining results, we can look at the differences between the third to last, second to last and current data point.
+If the difference in change for any axis is large enough, we can be certain that the die is making very sudden movements and can therefor be identified as either being shaken or being rolled, both of which can be assigned to the status `Rolling`.
+Also, if the individual differences in changes are smaller but the absolute sum of all changes on all axes is large enough, we can also assume that is being shaken or rolled.
+
+Looking at the data, the magic values here seem to be roughly stem:[0.4] for an individual axis or stem:[0.75] for the sum of the absolute values.
+So:
+[source, python]
+----
+include::src/determine_state.py[tag=updateState-absDiffs,indent=0]
+----

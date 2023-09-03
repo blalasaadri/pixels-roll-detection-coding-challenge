@@ -13,19 +13,21 @@ def initialize(max_backtracking: int = 2, max_age_in_millis: int = 10000):
     maxage = max_age_in_millis
 
 
-def calculateMaxAbsDiffsInQueue(
+def calculateMaxAbsDiffs(
     data_with_abs: list[dict[str, tuple[float, ...]]],
     backtracks: int,
 ):
     max_abs_diff: float = 0.0
     start = max(len(data_with_abs) - backtracks, 1)
-    for i in range(start, len(data_with_abs)):
+    for i in range(1, len(data_with_abs)):
         abs_diff: float = abs(
             data_with_abs[i]["summed_abs_measurements"][0]
             - data_with_abs[i - 1]["summed_abs_measurements"][0]
         )
-        if abs_diff > max_abs_diff:
-            max_abs_diff = abs_diff
+        data_with_abs[i]["abs_diff"] = (abs_diff,)
+    for i in range(start, len(data_with_abs)):
+        if data_with_abs[i]["abs_diff"][0] > max_abs_diff:
+            max_abs_diff = data_with_abs[i]["abs_diff"][0]
     return max_abs_diff
 
 
@@ -36,6 +38,7 @@ def calculateTotalGravitySquared(
         {
             "time": data_entry["time"],
             "measurements": data_entry["measurements"],
+            "abs_diff": data_entry.get("abs_diff", (0.0,)),
             "absolute_measurements": data_entry["absolute_measurements"],
             "summed_abs_measurements": data_entry["summed_abs_measurements"],
             "total_grav_sq": (
@@ -81,6 +84,7 @@ def calculateTotalGravDiffsSquared(
         {
             "time": data_entry["time"],
             "measurements": data_entry["measurements"],
+            "abs_diff": data_entry["abs_diff"],
             "measurement_diffs": data_entry["measurement_diffs"],
             "absolute_measurements": data_entry["absolute_measurements"],
             "summed_abs_measurements": data_entry["summed_abs_measurements"],
@@ -109,6 +113,27 @@ def calculateAverageTotalGravSquaredDiffs(
         )
     avg = total_grav_squared_diff / (len(data_with_total_grav_diffs_sq) - start)
     return avg
+
+
+def calculateAbsDiffsToPrevious(
+    data_with_total_grav_diffs_squared: list[dict[str, tuple[float, ...]]]
+):
+    if len(data_with_total_grav_diffs_squared) == 0:
+        return 0
+    elif len(data_with_total_grav_diffs_squared) == 1:
+        x, y, z = data_with_total_grav_diffs_squared[0].get(
+            "measurement_diffs", (0, 0, 0)
+        )
+        return abs(x) + abs(y) + abs(z)
+    else:
+        x1, y1, z1 = data_with_total_grav_diffs_squared[-1].get(
+            "measurement_diffs", (0, 0, 0)
+        )
+        x2, y2, z2 = data_with_total_grav_diffs_squared[-2].get(
+            "measurement_diffs", (0, 0, 0)
+        )
+        sum = (abs(x1) + abs(y1) + abs(z1)) - (abs(x2) + abs(y2) + abs(z2))
+        return (abs(x1 - x2), abs(y1 - y2), abs(z1 - z2), sum)
 
 
 def updateState(time: int, measurements: tuple[float, float, float]):
@@ -152,7 +177,7 @@ def updateState(time: int, measurements: tuple[float, float, float]):
         }
         for data_entry in data_with_abs_tmp
     ]
-    max_abs_diff = calculateMaxAbsDiffsInQueue(
+    max_abs_diff = calculateMaxAbsDiffs(
         data_with_abs, backtracks=min(2, max_backtracks)
     )
     if max_abs_diff < 0.01:
@@ -196,8 +221,24 @@ def updateState(time: int, measurements: tuple[float, float, float]):
     )
     if avg_grav_squared_diffs >= 1.0:
         return "Rolling"
-    elif avg_grav_squared_diffs <= 0.5:
+    elif avg_grav_squared_diffs <= 0.35:
         return "Handling"
     # end::updateState-totalGravitySquaredDiffs[]
 
+    # tag::updateState-absDiffs[]
+    abs_diffs_to_previous = calculateAbsDiffsToPrevious(
+        data_with_total_grav_diffs_squared
+    )
+    if (
+        abs_diffs_to_previous[0] >= 0.4
+        or abs_diffs_to_previous[1] >= 0.4
+        or abs_diffs_to_previous[2] >= 0.4
+        or abs_diffs_to_previous[3] >= 0.75
+    ):
+        return "Rolling"
+    else:
+        return "Handling"
+    # end::updateState-absDiffs[]
+
+    # This will never happen, as long as the previous if statement is present.
     return "Unknown"
