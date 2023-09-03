@@ -308,3 +308,29 @@ With these two checks, we catch _almost_ every case where the die is in the `OnF
 
 The remaining cases in the sample data where this is not the case (so cases that were manually tagged as `OnFace` and this algorithm doesn't recognise as such), are all right before data points where the manually tagged state acutally does change (specifically always 1 or two 2 data points before such a case) and thus are probably mislabelings.
 ====
+
+### Differences between total accumulated gravity values
+
+Now that we have determined when the die is laying down, we have to differentiate between it being rolled and it "just" being handled.
+This is considerably more difficult, so again we'll be trying to do so with multiple steps.
+
+To do this, we first need the measurement differences between a data point and the prior data point; these will be required for several future steps.
+
+This by itself is already useful; we can say that anything that has a value above stem:[3.5] (and that hasn't been filtered out before) is certainly in the `Rolling` state while anything with a value of stem:[0.3] (including for the previous value) is in the state `Handling`.
+[source, python]
+----
+include::src/determine_state.py[tag=updateState-measurementDiffs,indent=0]
+----
+
+Then, using an approach similar to what we've already done, we'll calculate the total differences in gravity between consecutive steps and use the maximum value.
+
+The data shows us, that while being handled (state `Handling`), the squared differences rarely exceeds stem:[1] while when being rolled (state `Rolling`) it is rarely below stem:[1] for very long and will often exceed values of stem:[3.5] (which only very rarely happens while in the `Handling` state).
+In fact, if you average out the last 10 rolls, this becomes even more prominent with the average value rarely being lower than stem:[0.5] while rolling and rarely being higher than stem:[0.5] while being handled.
+To be sure, we can say that anything that has an average above a value of stem:[1] (and again, that hasn't been filtered out before) is in the `Rolling` state while anything with an average below stem:[0.5] is in the state `Handling`.
+
+[source, python]
+----
+include::src/determine_state.py[tag=updateState-totalGravitySquaredDiffs,indent=0]
+----
+
+This already handles a large percentage of all cases; in the link:data/dataset_02/Sample2.csv[] file (which is the larger of the two provided samples) only 70 of the 1,325 data points cannot be assigned with the prior tests.
