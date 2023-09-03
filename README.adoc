@@ -204,7 +204,18 @@ pip3 install -r requirements.txt
 
 ## How to run the code
 
-TODO
+Assuming you have a Python 3 installation available on your path as `python3`, you can run the following command:
+[source, sh]
+----
+python3 src/start.py data/dataset_01/Pixels_simple_rolls_1.csv --output output/output.csv
+----
+
+Alternatively you can run this in Docker without having to install any Python dependencies:
+[source, sh]
+----
+docker build . -t pixels-roll-detect
+docker run -v "$PWD/data:/tmp/data" -v "$PWD/output:/tmp/output" pixels-roll-detect /tmp/data/dataset_01/Pixels_simple_rolls_1.csv --output /tmp/output/out.csv
+----
 
 ## How the code works
 
