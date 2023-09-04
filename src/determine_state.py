@@ -34,20 +34,17 @@ def calculateMaxAbsDiffs(
 def calculateTotalGravitySquared(
     data_with_abs: list[dict[str, tuple[float, ...]]],
 ):
+    def addAbsoluteMeasurementsSquared(data_entry: dict[str, tuple[float, ...]]):
+        clone = copy.deepcopy(data_entry)
+        clone["total_grav_sq"] = (
+            data_entry["absolute_measurements"][0] ** 2
+            + data_entry["absolute_measurements"][1] ** 2
+            + data_entry["absolute_measurements"][2] ** 2,
+        )
+        return clone
+
     data_with_total_grav_sq: list[dict[str, tuple[float, ...]]] = [
-        {
-            "time": data_entry["time"],
-            "measurements": data_entry["measurements"],
-            "abs_diff": data_entry.get("abs_diff", (0.0,)),
-            "absolute_measurements": data_entry["absolute_measurements"],
-            "summed_abs_measurements": data_entry["summed_abs_measurements"],
-            "total_grav_sq": (
-                data_entry["absolute_measurements"][0] ** 2
-                + data_entry["absolute_measurements"][1] ** 2
-                + data_entry["absolute_measurements"][2] ** 2,
-            ),
-        }
-        for data_entry in data_with_abs
+        addAbsoluteMeasurementsSquared(data_entry) for data_entry in data_with_abs
     ]
     return data_with_total_grav_sq
 
@@ -55,17 +52,26 @@ def calculateTotalGravitySquared(
 def calculateGravityDiffs(data_with_total_grav_sq: list[dict[str, tuple[float, ...]]]):
     data_with_grav_diffs: list[dict[str, tuple[float, ...]]] = []
     if len(data_with_total_grav_sq) == 0:
-        return data_with_total_grav_sq
+        return []
     elif len(data_with_total_grav_sq) == 1:
         entry = copy.deepcopy(data_with_total_grav_sq[0])
-        entry["measurement_diffs"] = (0, 0, 0)
+        if not "measurement_diffs" in entry:
+            entry["measurement_diffs"] = (
+                entry["measurements"][0],
+                entry["measurements"][1],
+                entry["measurements"][2],
+            )
         data_with_grav_diffs.append(entry)
     else:
         for i in range(0, len(data_with_total_grav_sq)):
             entry = copy.deepcopy(data_with_total_grav_sq[i])
-            if not "x_diff" in entry:
+            if not "measurement_diffs" in entry:
                 if i == 0:
-                    entry["measurement_diffs"] = (0, 0, 0)
+                    entry["measurement_diffs"] = (
+                        entry["measurements"][0],
+                        entry["measurements"][1],
+                        entry["measurements"][2],
+                    )
                 else:
                     previousEntry = data_with_grav_diffs[-1]
                     entry["measurement_diffs"] = (
@@ -80,22 +86,17 @@ def calculateGravityDiffs(data_with_total_grav_sq: list[dict[str, tuple[float, .
 def calculateTotalGravDiffsSquared(
     data_with_grav_diffs: list[dict[str, tuple[float, ...]]],
 ):
+    def addTotalGravDiffs(data_entry: dict[str, tuple[float, ...]]):
+        clone = copy.deepcopy(data_entry)
+        clone["total_grav_diffs_sq"] = (
+            data_entry["measurement_diffs"][0] ** 2
+            + data_entry["measurement_diffs"][1] ** 2
+            + data_entry["measurement_diffs"][2] ** 2,
+        )
+        return clone
+
     data_with_total_grav_diffs_sq: list[dict[str, tuple[float, ...]]] = [
-        {
-            "time": data_entry["time"],
-            "measurements": data_entry["measurements"],
-            "abs_diff": data_entry["abs_diff"],
-            "measurement_diffs": data_entry["measurement_diffs"],
-            "absolute_measurements": data_entry["absolute_measurements"],
-            "summed_abs_measurements": data_entry["summed_abs_measurements"],
-            "total_grav_sq": data_entry["total_grav_sq"],
-            "total_grav_diffs_sq": (
-                data_entry["measurement_diffs"][0] ** 2
-                + data_entry["measurement_diffs"][1] ** 2
-                + data_entry["measurement_diffs"][2] ** 2,
-            ),
-        }
-        for data_entry in data_with_grav_diffs
+        addTotalGravDiffs(data_entry) for data_entry in data_with_grav_diffs
     ]
     return data_with_total_grav_diffs_sq
 
@@ -119,12 +120,13 @@ def calculateAbsDiffsToPrevious(
     data_with_total_grav_diffs_squared: list[dict[str, tuple[float, ...]]]
 ):
     if len(data_with_total_grav_diffs_squared) == 0:
-        return 0
+        return (0, 0, 0, 0)
     elif len(data_with_total_grav_diffs_squared) == 1:
         x, y, z = data_with_total_grav_diffs_squared[0].get(
             "measurement_diffs", (0, 0, 0)
         )
-        return abs(x) + abs(y) + abs(z)
+        sum = abs(x) + abs(y) + abs(z)
+        return (abs(x), abs(y), abs(z), sum)
     else:
         x1, y1, z1 = data_with_total_grav_diffs_squared[-1].get(
             "measurement_diffs", (0, 0, 0)
@@ -133,7 +135,7 @@ def calculateAbsDiffsToPrevious(
             "measurement_diffs", (0, 0, 0)
         )
         sum = (abs(x1) + abs(y1) + abs(z1)) - (abs(x2) + abs(y2) + abs(z2))
-        return (abs(x1 - x2), abs(y1 - y2), abs(z1 - z2), sum)
+        return (abs(x1 - x2), abs(y1 - y2), abs(z1 - z2), abs(sum))
 
 
 def updateState(time: int, measurements: tuple[float, float, float]):
@@ -150,9 +152,7 @@ def updateState(time: int, measurements: tuple[float, float, float]):
         history.get()
     # end::updateState-history[]
 
-    # tag::updateState-totalAcceleration[]
-    # Check whether the total acceleration has been changing. This can be a simple way to detect whether the die is laying on its face.
-    data_with_abs_tmp: list[dict[str, tuple[float, ...]]] = [
+    data_with_abs: list[dict[str, tuple[float, ...]]] = [
         {
             "time": (float(entry_time),),
             "measurements": entry_measurements,
@@ -164,21 +164,35 @@ def updateState(time: int, measurements: tuple[float, float, float]):
         }
         for entry_time, entry_measurements in history.queue
     ]
-    data_with_abs: list[dict[str, tuple[float, ...]]] = [
-        {
-            "time": data_entry["time"],
-            "measurements": data_entry["measurements"],
-            "absolute_measurements": data_entry["absolute_measurements"],
-            "summed_abs_measurements": (
-                data_entry["absolute_measurements"][0]
-                + data_entry["absolute_measurements"][1]
-                + data_entry["absolute_measurements"][2],
-            ),
-        }
-        for data_entry in data_with_abs_tmp
+
+    # tag::updateState-absDiffs[]
+    data_with_grav_diffs = calculateGravityDiffs(data_with_abs)
+    abs_diffs_to_previous = calculateAbsDiffsToPrevious(data_with_grav_diffs)
+    if (
+        abs_diffs_to_previous[0] >= 1.1
+        or abs_diffs_to_previous[1] >= 1.1
+        or abs_diffs_to_previous[2] >= 1.1
+        or abs_diffs_to_previous[3] >= 2.2
+    ):
+        return "Rolling"
+    # end::updateState-absDiffs[]
+
+    # tag::updateState-totalAcceleration[]
+    # Check whether the total acceleration has been changing. This can be a simple way to detect whether the die is laying on its face.
+    def addSummedAbsMeasurements(data_entry: dict[str, tuple[float, ...]]):
+        clone = copy.deepcopy(data_entry)
+        clone["summed_abs_measurements"] = (
+            data_entry["absolute_measurements"][0]
+            + data_entry["absolute_measurements"][1]
+            + data_entry["absolute_measurements"][2],
+        )
+        return clone
+
+    data_with_abs_summed: list[dict[str, tuple[float, ...]]] = [
+        addSummedAbsMeasurements(data_entry) for data_entry in data_with_grav_diffs
     ]
     max_abs_diff = calculateMaxAbsDiffs(
-        data_with_abs, backtracks=min(2, max_backtracks)
+        data_with_abs_summed, backtracks=min(2, max_backtracks)
     )
     if max_abs_diff < 0.01:
         return "OnFace"
@@ -190,7 +204,7 @@ def updateState(time: int, measurements: tuple[float, float, float]):
 
     # tag::updateState-totalGravitySquared[]
     # Calculate the squared accumulated gravity for each entry
-    data_with_total_grav_sq = calculateTotalGravitySquared(data_with_abs)
+    data_with_total_grav_sq = calculateTotalGravitySquared(data_with_abs_summed)
     if (
         data_with_total_grav_sq[-1]["total_grav_sq"][0] >= 1.0
         and data_with_total_grav_sq[-1]["total_grav_sq"][0] < 1.11
@@ -199,7 +213,6 @@ def updateState(time: int, measurements: tuple[float, float, float]):
     # end::updateState-totalGravitySquared[]
 
     # tag::updateState-measurementDiffs[]
-    data_with_grav_diffs = calculateGravityDiffs(data_with_total_grav_sq)
     data_with_total_grav_diffs_squared = calculateTotalGravDiffsSquared(
         data_with_grav_diffs
     )
@@ -225,20 +238,4 @@ def updateState(time: int, measurements: tuple[float, float, float]):
         return "Handling"
     # end::updateState-totalGravitySquaredDiffs[]
 
-    # tag::updateState-absDiffs[]
-    abs_diffs_to_previous = calculateAbsDiffsToPrevious(
-        data_with_total_grav_diffs_squared
-    )
-    if (
-        abs_diffs_to_previous[0] >= 0.4
-        or abs_diffs_to_previous[1] >= 0.4
-        or abs_diffs_to_previous[2] >= 0.4
-        or abs_diffs_to_previous[3] >= 0.75
-    ):
-        return "Rolling"
-    else:
-        return "Handling"
-    # end::updateState-absDiffs[]
-
-    # This will never happen, as long as the previous if statement is present.
-    return "Unknown"
+    return "Rolling"
