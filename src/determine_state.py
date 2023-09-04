@@ -152,6 +152,7 @@ def updateState(time: int, measurements: tuple[float, float, float]):
         history.get()
     # end::updateState-history[]
 
+    # tag::updateState-absDiffs[]
     data_with_abs: list[dict[str, tuple[float, ...]]] = [
         {
             "time": (float(entry_time),),
@@ -165,7 +166,6 @@ def updateState(time: int, measurements: tuple[float, float, float]):
         for entry_time, entry_measurements in history.queue
     ]
 
-    # tag::updateState-absDiffs[]
     data_with_grav_diffs = calculateGravityDiffs(data_with_abs)
     abs_diffs_to_previous = calculateAbsDiffsToPrevious(data_with_grav_diffs)
     if (
@@ -197,10 +197,6 @@ def updateState(time: int, measurements: tuple[float, float, float]):
     if max_abs_diff < 0.01:
         return "OnFace"
     # end::updateState-totalAcceleration[]
-
-    # We have now filtered out a number of cases where the die would simply be laying on its face.
-    # There are however a number of "OnFace" cases that will not have been detected yet.
-    # Let's get into those.
 
     # tag::updateState-totalGravitySquared[]
     # Calculate the squared accumulated gravity for each entry
@@ -238,4 +234,6 @@ def updateState(time: int, measurements: tuple[float, float, float]):
         return "Handling"
     # end::updateState-totalGravitySquaredDiffs[]
 
+    # tag::updateState-finalCase[]
     return "Rolling"
+    # end::updateState-finalCase[]

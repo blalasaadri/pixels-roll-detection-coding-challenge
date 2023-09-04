@@ -6,7 +6,7 @@
 :toclevels: 3
 :toc: auto
 
-This is an entry to the coding challenge for the https://gamewithpixels.com[Pixels Electronic Dice] coding challenge for better roll detection.
+This is an entry by Discord user _blalasaadri_ (backer #361 of the Pixels Kickstarter) to the coding challenge for the https://gamewithpixels.com[Pixels Electronic Dice] coding challenge for better roll detection.
 It is written in Python 3 (though by someone with very little experience in Python), the algorithm however does not use anything specific to Python and the dependencies used are only used to make the project easier to run and to avoid coding errors.
 
 Section 1:: This section is meant for understanding the context; if you are familiar with Pixels dice and the coding challenge, you can skip this part.
@@ -255,15 +255,116 @@ docker run -it \ #<1>
 
 The actual logic is all contained within the link:src/determine_state.py[] file.
 The individual steps of the logic can be found within the `updateState` method:
+// Include the code for local rendering
+ifndef::env-github[]
 [source, python]
 ----
 def updateState(time: int, measurements: tuple[float, float, float]):
 include::src/determine_state.py[tag=updateState-history]
 
+include::src/determine_state.py[tag=updateState-absDiffs]
+
 include::src/determine_state.py[tag=updateState-totalAcceleration]
 
 include::src/determine_state.py[tag=updateState-totalGravitySquared]
+
+include::src/determine_state.py[tag=updateState-measurementDiffs]
+
+include::src/determine_state.py[tag=updateState-totalGravitySquaredDiffs]
 ----
+endif::[]
+// Since GitHub doesn't support the include statement, we have to copy the contents over manually :-(
+ifdef::env-github[]
+[source, python]
+----
+
+def updateState(time: int, measurements: tuple[float, float, float]):
+    if history.full():
+        history.get()  # Remove one item from the queue
+    history.put((time, measurements))
+    # Filter out any entries that are older than maxage
+    pops = 0
+    for entry_time, _ in history.queue:
+        if time - entry_time > maxage:
+            pops += 1
+    for i in range(0, pops):
+        history.get()
+
+    data_with_abs: list[dict[str, tuple[float, ...]]] = [
+        {
+            "time": (float(entry_time),),
+            "measurements": entry_measurements,
+            "absolute_measurements": (
+                abs(entry_measurements[0]),
+                abs(entry_measurements[1]),
+                abs(entry_measurements[2]),
+            ),
+        }
+        for entry_time, entry_measurements in history.queue
+    ]
+
+    data_with_grav_diffs = calculateGravityDiffs(data_with_abs)
+    abs_diffs_to_previous = calculateAbsDiffsToPrevious(data_with_grav_diffs)
+    if (
+        abs_diffs_to_previous[0] >= 1.1
+        or abs_diffs_to_previous[1] >= 1.1
+        or abs_diffs_to_previous[2] >= 1.1
+        or abs_diffs_to_previous[3] >= 2.2
+    ):
+        return "Rolling"
+
+    # Check whether the total acceleration has been changing. This can be a simple way to detect whether the die is laying on its face.
+    def addSummedAbsMeasurements(data_entry: dict[str, tuple[float, ...]]):
+        clone = copy.deepcopy(data_entry)
+        clone["summed_abs_measurements"] = (
+            data_entry["absolute_measurements"][0]
+            + data_entry["absolute_measurements"][1]
+            + data_entry["absolute_measurements"][2],
+        )
+        return clone
+
+    data_with_abs_summed: list[dict[str, tuple[float, ...]]] = [
+        addSummedAbsMeasurements(data_entry) for data_entry in data_with_grav_diffs
+    ]
+    max_abs_diff = calculateMaxAbsDiffs(
+        data_with_abs_summed, backtracks=min(2, max_backtracks)
+    )
+    if max_abs_diff < 0.01:
+        return "OnFace"
+
+    # Calculate the squared accumulated gravity for each entry
+    data_with_total_grav_sq = calculateTotalGravitySquared(data_with_abs_summed)
+    if (
+        data_with_total_grav_sq[-1]["total_grav_sq"][0] >= 1.0
+        and data_with_total_grav_sq[-1]["total_grav_sq"][0] < 1.11
+    ):
+        return "OnFace"
+
+    data_with_total_grav_diffs_squared = calculateTotalGravDiffsSquared(
+        data_with_grav_diffs
+    )
+    if data_with_total_grav_diffs_squared[-1]["total_grav_diffs_sq"][0] == 0:
+        return "OnFace"
+    elif (
+        len(data_with_total_grav_diffs_squared) >= 2
+        and data_with_total_grav_diffs_squared[-1]["total_grav_diffs_sq"][0] <= 0.3
+        and data_with_total_grav_diffs_squared[-2]["total_grav_diffs_sq"][0] <= 0.3
+    ):
+        return "Handling"
+    elif data_with_total_grav_diffs_squared[-1]["total_grav_diffs_sq"][0] >= 3.5:
+        return "Rolling"
+
+    avg_grav_squared_diffs = calculateAverageTotalGravSquaredDiffs(
+        data_with_total_grav_diffs_squared, max_backtracks
+    )
+    if avg_grav_squared_diffs >= 1.0:
+        return "Rolling"
+    elif avg_grav_squared_diffs <= 0.35:
+        return "Handling"
+
+    return "Rolling"
+----
+endif::[]
 Let's get into the individual steps.
 
 ### Updating the history
@@ -276,35 +377,149 @@ This value can be changed by setting the `--backtracking` argument in the comman
 However, even if we only look at a certain number of values, there may still be data in there that is not useful because it is too old.
 That is why we also filter by the maximum age (given in milli seconds) of an entry compared to the latest entry.
 This value can be set via the `--maxage` command line option and is 10000 by default (wich equals 10 seconds).
+// Include the code for local rendering
+ifndef::env-github[]
 [source, python]
 ----
 include::src/determine_state.py[tag=updateState-history,indent=0]
 ----
+endif::env-github[]
+// Copy the code for GitHub
+ifdef::env-github[]
+[source, python]
+----
+if history.full():
+    history.get()  # Remove one item from the queue
+history.put((time, measurements))
+# Filter out any entries that are older than maxage
+pops = 0
+for entry_time, _ in history.queue:
+    if time - entry_time > maxage:
+        pops += 1
+for i in range(0, pops):
+    history.get()
+----
+endif::env-github[]
+
+### Absolute differences to the previous result
+
+Next we can look at the differences between the third to last, second to last and current data point.
+If the difference in change for any axis is large enough, we can be certain that the die is making very sudden movements and can therefor be identified as either being shaken or being rolled, both of which can be assigned to the status `Rolling`.
+Also, if the individual differences in changes are smaller but the absolute sum of all changes on all axes is large enough, we can also assume that is being shaken or rolled.
+
+Looking at the data, the magic values here seem to be roughly stem:[1.1] for an individual axis or stem:[2.2] for the sum of the absolute values.
+So:
+// Include the code for local rendering
+ifndef::env-github[]
+[source, python]
+----
+include::src/determine_state.py[tag=updateState-absDiffs,indent=0]
+----
+endif::env-github[]
+// Copy the code for GitHub
+ifdef::env-github[]
+[source, python]
+----
+data_with_abs: list[dict[str, tuple[float, ...]]] = [
+    {
+        "time": (float(entry_time),),
+        "measurements": entry_measurements,
+        "absolute_measurements": (
+            abs(entry_measurements[0]),
+            abs(entry_measurements[1]),
+            abs(entry_measurements[2]),
+        ),
+    }
+    for entry_time, entry_measurements in history.queue
+]
+
+data_with_grav_diffs = calculateGravityDiffs(data_with_abs)
+abs_diffs_to_previous = calculateAbsDiffsToPrevious(data_with_grav_diffs)
+if (
+    abs_diffs_to_previous[0] >= 1.1
+    or abs_diffs_to_previous[1] >= 1.1
+    or abs_diffs_to_previous[2] >= 1.1
+    or abs_diffs_to_previous[3] >= 2.2
+):
+    return "Rolling"
+----
+endif::env-github[]
 
 ### Calculating total acceleration
-Next, we want to filter out cases where the die is obviously not rolling.
+Next, we want to filter out some cases where the die is obviously **not** rolling.
 This can be done by calculating the absolute differences between each two consecutive values and finding the maximum of those differences.
 If the maximum difference between any two consecutive values is minimal, the die is very obviously not being rolled.
+// Include the code for local rendering
+ifndef::env-github[]
 [source, python]
 ----
 include::src/determine_state.py[tag=updateState-totalAcceleration,indent=0]
 ----
+endif::env-github[]
+// Copy the code for GitHub
+ifdef::env-github[]
+[source, python]
+----
+# Check whether the total acceleration has been changing. This can be a simple way to detect whether the die is laying on its face.
+def addSummedAbsMeasurements(data_entry: dict[str, tuple[float, ...]]):
+    clone = copy.deepcopy(data_entry)
+    clone["summed_abs_measurements"] = (
+        data_entry["absolute_measurements"][0]
+        + data_entry["absolute_measurements"][1]
+        + data_entry["absolute_measurements"][2],
+    )
+    return clone
+
+data_with_abs_summed: list[dict[str, tuple[float, ...]]] = [
+    addSummedAbsMeasurements(data_entry) for data_entry in data_with_grav_diffs
+]
+max_abs_diff = calculateMaxAbsDiffs(
+    data_with_abs_summed, backtracks=min(2, max_backtracks)
+)
+if max_abs_diff < 0.01:
+    return "OnFace"
+----
+endif::env-github[]
+[NOTE]
+====
+In this section, I define a local function called `addSummedAbsMeasurements` which makes the following list comprehension (which are _"a concise way to create lists"_ in Python and some other languages, as stated and explained https://docs.python.org/2/tutorial/datastructures.html#list-comprehensions[here]) easier to write.
+This local function copies an entry (which is a Python dictionary here, though it could be any kind of data transfer object) and then adds a value for the new key `summed_abs_measurements`, which is derrived from other known values.
+
+I use this kind of structure in multiple methods throughout the algorighm; from a technical standpoint one could probably also just have a list of objects and manipulate those.
+====
 
 ### Calculating the accumulated measured gravity
-Step 3 is determining, what the accumulated measured gravity value is.
+The next step is determining, what the accumulated measured gravity value is.
 In a perfect world with perfect sensors, when the die is just laying flat and not being moved, this would be exactly stem:[1] at all times.
 Since however we do not live in a perfect world and the dies sensors will register small fluctuations (whether or not they are actually there), we have to work with a margin of error here.
 
 Looking at the example data, the accummulated measured gravity (which can be calculated via the formula stem:[sqrt(x^2 + y^2 + z^2)]) hovers around stem:[1.05] when the die is laying flat (and thus the state should be `OnFace`).
 Since calculating a square root is computationally rather complex though, we'll be working with the square of the accumulated measured gravity (stem:[x^2 + y^2 + z^2]) which averages at about stem:[1.107] when the die should be in the `OnFace` state.
 To be sure, we'll be a bit generous here and state that everything that is at least stem:[1.0] and lower than stem:[1.11] should be considered laying down; these values may be modified slightly if required.
+// Include the code for local rendering
+ifndef::env-github[]
 [source, python]
 ----
 include::src/determine_state.py[tag=updateState-totalGravitySquared,indent=0]
 ----
+endif::env-github[]
+// Copy the code for GitHub
+ifdef::env-github[]
+[source, python]
+----
+# Calculate the squared accumulated gravity for each entry
+data_with_total_grav_sq = calculateTotalGravitySquared(data_with_abs_summed)
+if (
+    data_with_total_grav_sq[-1]["total_grav_sq"][0] >= 1.0
+    and data_with_total_grav_sq[-1]["total_grav_sq"][0] < 1.11
+):
+    return "OnFace"
+----
+endif::env-github[]
+
 [IMPORTANT]
 ====
-With these two checks, we catch _almost_ every case where the die is in the `OnFace` state according to the manual tagging.
+With the checks so far, we catch _almost_ every case where the die is in the `OnFace` state according to the manual tagging.
 
 The remaining cases in the sample data where this is not the case (so cases that were manually tagged as `OnFace` and this algorithm doesn't recognise as such), are all right before data points where the manually tagged state acutally does change (specifically always 1 or two 2 data points before such a case) and thus are probably mislabelings.
 ====
@@ -312,39 +527,90 @@ The remaining cases in the sample data where this is not the case (so cases that
 ### Differences between total accumulated gravity values
 
 Now that we have determined when the die is laying down, we have to differentiate between it being rolled and it "just" being handled.
-This is considerably more difficult, so again we'll be trying to do so with multiple steps.
 
 To do this, we first need the measurement differences between a data point and the prior data point; these will be required for several future steps.
 
-This by itself is already useful; we can say that anything that has a value above stem:[3.5] (and that hasn't been filtered out before) is certainly in the `Rolling` state while anything with a value of stem:[0.3] (including for the previous value) is in the state `Handling`.
+This by itself is already useful; we can say that anything that has a value of stem:[0] is not moving and so in the `OnFace` state.
+Anything above stem:[3.5] (and that hasn't been filtered out before) is almost certainly in the `Rolling` state while anything with a value of stem:[0.3] or lower for both the current and the previous value is in the state `Handling`.
+// Include the code for local rendering
+ifndef::env-github[]
 [source, python]
 ----
 include::src/determine_state.py[tag=updateState-measurementDiffs,indent=0]
 ----
+endif::env-github[]
+// Copy the code for GitHub
+ifdef::env-github[]
+[source, python]
+----
+data_with_total_grav_diffs_squared = calculateTotalGravDiffsSquared(
+    data_with_grav_diffs
+)
+if data_with_total_grav_diffs_squared[-1]["total_grav_diffs_sq"][0] == 0:
+    return "OnFace"
+elif (
+    len(data_with_total_grav_diffs_squared) >= 2
+    and data_with_total_grav_diffs_squared[-1]["total_grav_diffs_sq"][0] <= 0.3
+    and data_with_total_grav_diffs_squared[-2]["total_grav_diffs_sq"][0] <= 0.3
+):
+    return "Handling"
+elif data_with_total_grav_diffs_squared[-1]["total_grav_diffs_sq"][0] >= 3.5:
+    return "Rolling"
+----
+endif::env-github[]
 
 Then, using an approach similar to what we've already done, we'll calculate the total differences in gravity between consecutive steps and use the maximum value.
 
 The data shows us, that while being handled (state `Handling`), the squared differences rarely exceeds stem:[1] while when being rolled (state `Rolling`) it is rarely below stem:[1] for very long and will often exceed values of stem:[3.5] (which only very rarely happens while in the `Handling` state).
 In fact, if you average out the last 10 rolls, this becomes even more prominent with the average value rarely being lower than stem:[0.5] while rolling and rarely being higher than stem:[0.5] while being handled.
-To be sure, we can say that anything that has an average above a value of stem:[1] (and again, that hasn't been filtered out before) is in the `Rolling` state while anything with an average below stem:[0.5] is in the state `Handling`.
-
+To be sure, we can say that anything that has an average above a value of stem:[1] (and again, that hasn't been filtered out before) is in the `Rolling` state while anything with an average at or below stem:[0.35] is in the state `Handling`.
+// Include the code for local rendering
+ifndef::env-github[]
 [source, python]
 ----
 include::src/determine_state.py[tag=updateState-totalGravitySquaredDiffs,indent=0]
 ----
-
-This already handles a large percentage of all cases; in the link:data/dataset_02/Sample2.csv[] file (which is the larger of the two provided samples) only 70 of the 1,325 data points cannot be assigned with the prior tests.
-But we can do better than that.
-
-### Absolute differences to the previous result
-
-To determine the states of the remaining results, we can look at the differences between the third to last, second to last and current data point.
-If the difference in change for any axis is large enough, we can be certain that the die is making very sudden movements and can therefor be identified as either being shaken or being rolled, both of which can be assigned to the status `Rolling`.
-Also, if the individual differences in changes are smaller but the absolute sum of all changes on all axes is large enough, we can also assume that is being shaken or rolled.
-
-Looking at the data, the magic values here seem to be roughly stem:[0.4] for an individual axis or stem:[0.75] for the sum of the absolute values.
-So:
+endif::env-github[]
+// Copy the code for GitHub
+ifdef::env-github[]
 [source, python]
 ----
-include::src/determine_state.py[tag=updateState-absDiffs,indent=0]
+avg_grav_squared_diffs = calculateAverageTotalGravSquaredDiffs(
+    data_with_total_grav_diffs_squared, max_backtracks
+)
+if avg_grav_squared_diffs >= 1.0:
+    return "Rolling"
+elif avg_grav_squared_diffs <= 0.35:
+    return "Handling"
 ----
+endif::env-github[]
+
+### Final case
+If no previous check has been able to determine the state of the die, it is safest to assume that the die is being rolled.
+So:
+
+// Include the code for local rendering
+ifndef::env-github[]
+[source, python]
+----
+include::src/determine_state.py[tag=updateState-finalCase,indent=0]
+----
+endif::env-github[]
+// Copy the code for GitHub
+ifdef::env-github[]
+[source, python]
+----
+return "Rolling"
+----
+endif::env-github[]
+
+## Result
+
+Using this algorithm with the provided data sets, we can correctly label about 85% of the values exactly as labeled (if interpreting `Picked Up` as `Handling`, `Shaking` as `Rolling` and `Shifting` as either `Handling` or `OnFace`).
+If we look at the cases which aren't identified as labeled, many of the data points are very close to a case where the die switches to or from the predicted state.
+
+There are also a few odd cases in the data; e.g. in the link:data/dataset_02/Samples2.csv[] file the measured acceleration values for the subsequent timestamps 3056 and 3217 are identical, though both are labeled as `Handling`.
+This algorithm determines, that at timestamp 3217 the die is `OnFace` since it hasn't changed at all.
+One could look at changes of the current data point compared to the two prior values to smoothe things out a bit here; however that would also delay the identification of when the die has landed after being rolled.
+
+Therefor my prediction is, that if this algorithm were used, especially if the die only reacts when two consecutive data points have given the same state, Pixels dice should be able to identify most cases correctly enough to determine, whether they have to determine what number has been rolled.
